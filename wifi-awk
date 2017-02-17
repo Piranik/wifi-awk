@@ -1,0 +1,109 @@
+#!/bin/bash
+#
+#	note: this thing needs "gawk" not "mawk"
+#		so may have to 'sudo apt-get install gawk'
+#
+# to get ESSID name from iwconfig ...
+base=$( /sbin/iwconfig wlan0 | head -1 | sed 's/^[^"]*"\([^"]*\)".*$/\1/' )
+# echo $base
+
+. /home/steve/bin/inc/colours
+grey="\033[0;37m"
+if [ ! -z $1 ]
+then
+	echo "# sudo iwlist wlan0 scan | awk ..."
+	echo "# filtering OPEN encrypts and BTWifi-X"
+	echo "########################################"
+fi
+echo -ne "$grey"
+echo -ne "___________________ESSID_ _____Address_____ Ch  Qual_  dBm"
+echo -e "$NORMAL "
+
+##
+## That's the shell, now to awk...
+##
+sudo iwlist wlan0 scan | awk -v base=$base -e '
+BEGIN {
+	green =	"\x1b[1;32m"
+	cyan  = "\x1b[1;36m"
+	grey  = "\x1b[0;38m"
+#	normal= "\x1b[1;m"
+	normal= "\x1b[0m"
+#	print "beginning with : ", base
+#	doHeaders()
+}
+
+!/Unknown:/ {
+#	print $0
+}
+
+/^[\t ]*Cell [0-9]{2}/ {
+	flushCell()
+	address=$5
+#	print "Address: " cyan address normal
+}
+
+/Channel:/{
+	two=split($1,levl,":")
+	if (two == 2){
+		channel=levl[2]
+	}
+}
+
+/Signal level/ {
+	two=split($1,levl,"=")
+	if (two == 2){
+		quality=levl[2]
+	}
+#	print "Quality: " cyan quality normal
+	two=split($3,levl,"=")
+	if ( two == 2 ){
+		level= levl[2]
+#		level= sprintf("%d %s", levl[2], $4)
+	}
+	else level=red + "ouch"
+#	print "Level: " cyan level normal
+}
+
+/^[\t ]*Encryption/{
+	two=split($2,levl,":")
+	key=levl[2] ##=="on"?1:0
+}
+
+/ESSID:/ {
+	two=split($1,levl,"\"")
+	ESSID=levl[2]
+#	if ( ESSID == base ){
+#		ESSID = sprintf( "%s%s%s", green, ESSID, normal)
+#	}
+#	print "ESSID: " cyan ESSID normal
+}
+
+##########################################################################
+
+END {
+	flushCell()
+}
+
+function flushCell(){
+#	if ( address != ""){ 
+#	if ( address != "" && key=="on"){
+	if ( address != "" && key=="on" && ESSID!="BTWifi-X"){
+#		if ( ESSID == base ){
+#			ESSID=sprintf("%s%s",green,ESSID)
+#		}
+		printf("%25s ",ESSID)
+		printf("%s ",address)
+		printf("%2d ",channel)
+		printf("%6s ",quality)
+		printf("%4s ",level)
+		printf("%3s", key)
+		if ( ESSID == base ){
+			printf(" <")
+		}
+		print normal
+
+	}
+	address=quality=level=channel=ESSID=key=""
+}
+'  | sort -nrk5
